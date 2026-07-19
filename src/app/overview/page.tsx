@@ -5,6 +5,7 @@ import Link from "next/link";
 import CategoryChart from "@/components/CategoryChart";
 import StatTile from "@/components/StatTile";
 import SynopsisPanel from "@/components/SynopsisPanel";
+import TokenActivity from "@/components/TokenActivity";
 import type { WalletStats } from "@/types";
 
 interface OverviewResponse {
@@ -16,6 +17,7 @@ interface OverviewResponse {
     netSol: number;
     txCount: number;
     byCategory: WalletStats["byCategory"];
+    tokenTally: WalletStats["tokenTally"];
   };
 }
 
@@ -74,6 +76,11 @@ export default function OverviewPage() {
       <div className="rounded-lg border border-[var(--border)] bg-surface p-4">
         <h2 className="mb-3 text-sm font-semibold text-text-primary">Spending by category</h2>
         <CategoryChart items={merged.byCategory} maxItems={10} />
+      </div>
+
+      <div className="rounded-lg border border-[var(--border)] bg-surface p-4">
+        <h2 className="mb-3 text-sm font-semibold text-text-primary">Token tally across all wallets</h2>
+        <TokenActivity tally={merged.tokenTally} />
       </div>
 
       <div className="rounded-lg border border-[var(--border)] bg-surface p-4">

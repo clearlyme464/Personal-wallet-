@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { COLLECTIONS, getDb } from "@/lib/mongodb";
 import { computeWalletStats } from "@/lib/analytics";
+import { annotateTokenMetadata } from "@/lib/tokenMetadata";
 import type { Transaction, Wallet } from "@/types";
 
 export async function GET(
@@ -23,7 +24,7 @@ export async function GET(
     .sort({ timestamp: -1 })
     .toArray();
 
-  const stats = computeWalletStats(address, transactions, wallet.label);
+  const stats = await annotateTokenMetadata(computeWalletStats(address, transactions, wallet.label));
 
   return NextResponse.json({ wallet, stats, transactions: transactions.slice(0, 100) });
 }

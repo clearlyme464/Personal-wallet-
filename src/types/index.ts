@@ -48,6 +48,25 @@ export interface CounterpartyBreakdownItem {
   count: number;
 }
 
+export interface TokenTally {
+  mint: string;
+  symbol?: string;
+  name?: string;
+  totalSent: number;
+  totalReceived: number;
+  count: number;
+}
+
+export interface TokenFlowItem {
+  mint: string;
+  symbol?: string;
+  name?: string;
+  counterparty: string;
+  direction: "sent" | "received";
+  amount: number;
+  count: number;
+}
+
 export interface WalletStats {
   address: string;
   label?: string;
@@ -60,4 +79,6 @@ export interface WalletStats {
   lastTxAt: number | null;
   byCategory: CategoryBreakdownItem[];
   topCounterparties: CounterpartyBreakdownItem[];
+  tokenTally: TokenTally[];
+  tokenFlows: TokenFlowItem[];
 }

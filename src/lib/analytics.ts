@@ -2,6 +2,8 @@ import { lamportsToSol } from "@/lib/solana";
 import type {
   CategoryBreakdownItem,
   CounterpartyBreakdownItem,
+  TokenFlowItem,
+  TokenTally,
   Transaction,
   WalletStats,
 } from "@/types";
@@ -18,6 +20,78 @@ function bump(map: Map<string, Bucket>, key: string, outflow: number, inflow: nu
   existing.inflow += inflow;
   existing.count += 1;
   map.set(key, existing);
+}
+
+interface TokenBucket {
+  sent: number;
+  received: number;
+  count: number;
+}
+
+function computeTokenActivity(
+  address: string,
+  transactions: Transaction[],
+): { tally: TokenTally[]; flows: TokenFlowItem[] } {
+  const tallyMap = new Map<string, TokenBucket>();
+  const flowMap = new Map<string, TokenFlowItem>();
+
+  for (const tx of transactions) {
+    for (const tt of tx.tokenTransfers) {
+      if (!tt.mint || !tt.tokenAmount) continue;
+
+      if (tt.fromUserAccount === address && tt.toUserAccount !== address) {
+        const t = tallyMap.get(tt.mint) ?? { sent: 0, received: 0, count: 0 };
+        t.sent += tt.tokenAmount;
+        t.count += 1;
+        tallyMap.set(tt.mint, t);
+
+        if (tt.toUserAccount) {
+          const key = `${tt.mint}|${tt.toUserAccount}|sent`;
+          const f = flowMap.get(key) ?? {
+            mint: tt.mint,
+            counterparty: tt.toUserAccount,
+            direction: "sent" as const,
+            amount: 0,
+            count: 0,
+          };
+          f.amount += tt.tokenAmount;
+          f.count += 1;
+          flowMap.set(key, f);
+        }
+      }
+
+      if (tt.toUserAccount === address && tt.fromUserAccount !== address) {
+        const t = tallyMap.get(tt.mint) ?? { sent: 0, received: 0, count: 0 };
+        t.received += tt.tokenAmount;
+        t.count += 1;
+        tallyMap.set(tt.mint, t);
+
+        if (tt.fromUserAccount) {
+          const key = `${tt.mint}|${tt.fromUserAccount}|received`;
+          const f = flowMap.get(key) ?? {
+            mint: tt.mint,
+            counterparty: tt.fromUserAccount,
+            direction: "received" as const,
+            amount: 0,
+            count: 0,
+          };
+          f.amount += tt.tokenAmount;
+          f.count += 1;
+          flowMap.set(key, f);
+        }
+      }
+    }
+  }
+
+  const tally: TokenTally[] = Array.from(tallyMap.entries())
+    .map(([mint, b]) => ({ mint, totalSent: b.sent, totalReceived: b.received, count: b.count }))
+    .sort((a, b) => b.totalSent + b.totalReceived - (a.totalSent + a.totalReceived));
+
+  const flows: TokenFlowItem[] = Array.from(flowMap.values())
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 50);
+
+  return { tally, flows };
 }
 
 export function computeWalletStats(
@@ -81,6 +155,8 @@ export function computeWalletStats(
     .sort((a, b) => b.outflowSol + b.inflowSol - (a.outflowSol + a.inflowSol))
     .slice(0, 10);
 
+  const { tally: tokenTally, flows: tokenFlows } = computeTokenActivity(address, transactions);
+
   return {
     address,
     label,
@@ -93,6 +169,8 @@ export function computeWalletStats(
     lastTxAt,
     byCategory,
     topCounterparties,
+    tokenTally,
+    tokenFlows,
   };
 }
 
@@ -102,8 +180,10 @@ export function mergeWalletStats(stats: WalletStats[]): {
   netSol: number;
   txCount: number;
   byCategory: CategoryBreakdownItem[];
+  tokenTally: TokenTally[];
 } {
   const categoryMap = new Map<string, Bucket>();
+  const tokenMap = new Map<string, TokenBucket & { symbol?: string; name?: string }>();
   let totalInflowSol = 0;
   let totalOutflowSol = 0;
   let txCount = 0;
@@ -119,6 +199,15 @@ export function mergeWalletStats(stats: WalletStats[]): {
       existing.count += c.count;
       categoryMap.set(c.category, existing);
     }
+    for (const t of s.tokenTally) {
+      const existing = tokenMap.get(t.mint) ?? { sent: 0, received: 0, count: 0 };
+      existing.sent += t.totalSent;
+      existing.received += t.totalReceived;
+      existing.count += t.count;
+      if (t.symbol) existing.symbol = t.symbol;
+      if (t.name) existing.name = t.name;
+      tokenMap.set(t.mint, existing);
+    }
   }
 
   const byCategory: CategoryBreakdownItem[] = Array.from(categoryMap.entries())
@@ -130,11 +219,23 @@ export function mergeWalletStats(stats: WalletStats[]): {
     }))
     .sort((a, b) => b.outflowSol + b.inflowSol - (a.outflowSol + a.inflowSol));
 
+  const tokenTally: TokenTally[] = Array.from(tokenMap.entries())
+    .map(([mint, b]) => ({
+      mint,
+      symbol: b.symbol,
+      name: b.name,
+      totalSent: b.sent,
+      totalReceived: b.received,
+      count: b.count,
+    }))
+    .sort((a, b) => b.totalSent + b.totalReceived - (a.totalSent + a.totalReceived));
+
   return {
     totalInflowSol,
     totalOutflowSol,
     netSol: totalInflowSol - totalOutflowSol,
     txCount,
     byCategory,
+    tokenTally,
   };
 }

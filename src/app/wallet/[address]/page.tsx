@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import CategoryChart from "@/components/CategoryChart";
 import StatTile from "@/components/StatTile";
 import SynopsisPanel from "@/components/SynopsisPanel";
+import TokenActivity from "@/components/TokenActivity";
 import TransactionTable from "@/components/TransactionTable";
 import type { Transaction, Wallet, WalletStats } from "@/types";
 
@@ -84,6 +85,11 @@ export default function WalletDetailPage() {
       <div className="rounded-lg border border-[var(--border)] bg-surface p-4">
         <h2 className="mb-3 text-sm font-semibold text-text-primary">Where the money went</h2>
         <CategoryChart items={stats.byCategory} />
+      </div>
+
+      <div className="rounded-lg border border-[var(--border)] bg-surface p-4">
+        <h2 className="mb-3 text-sm font-semibold text-text-primary">Token activity</h2>
+        <TokenActivity tally={stats.tokenTally} flows={stats.tokenFlows} />
       </div>
 
       {stats.topCounterparties.length > 0 && (

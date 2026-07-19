@@ -19,6 +19,14 @@ function formatStatsForPrompt(stats: WalletStats): string {
     .map((c) => `- ${c.address}: ${c.outflowSol.toFixed(3)} SOL out, ${c.inflowSol.toFixed(3)} SOL in, across ${c.count} tx`)
     .join("\n");
 
+  const topTokens = stats.tokenTally
+    .slice(0, 8)
+    .map(
+      (t) =>
+        `- ${t.symbol ?? t.mint}: ${t.totalSent.toFixed(3)} sent, ${t.totalReceived.toFixed(3)} received, across ${t.count} tx`,
+    )
+    .join("\n");
+
   return `Wallet: ${stats.address}${stats.label ? ` (${stats.label})` : ""}
 Transactions analyzed: ${stats.txCount}
 Total received: ${stats.totalInflowSol.toFixed(4)} SOL
@@ -31,7 +39,10 @@ Spending/receiving broken down by category or protocol source:
 ${topCategories || "(no categorized activity)"}
 
 Top counterparty addresses (where money came from / went to):
-${topCounterparties || "(no counterparty data)"}`;
+${topCounterparties || "(no counterparty data)"}
+
+Top SPL tokens sent/received (amounts are in each token's own units, not SOL):
+${topTokens || "(no token transfers)"}`;
 }
 
 export async function generateWalletSynopsis(stats: WalletStats): Promise<string> {
@@ -51,12 +62,26 @@ export async function generateWalletSynopsis(stats: WalletStats): Promise<string
 
 export async function generatePortfolioSynopsis(
   perWallet: WalletStats[],
-  merged: { totalInflowSol: number; totalOutflowSol: number; netSol: number; txCount: number },
+  merged: {
+    totalInflowSol: number;
+    totalOutflowSol: number;
+    netSol: number;
+    txCount: number;
+    tokenTally?: WalletStats["tokenTally"];
+  },
 ): Promise<string> {
   const walletSummaries = perWallet
     .map(
       (s) =>
         `- ${s.label ?? s.address}: ${s.txCount} tx, ${s.totalOutflowSol.toFixed(3)} SOL out, ${s.totalInflowSol.toFixed(3)} SOL in`,
+    )
+    .join("\n");
+
+  const topTokens = (merged.tokenTally ?? [])
+    .slice(0, 8)
+    .map(
+      (t) =>
+        `- ${t.symbol ?? t.mint}: ${t.totalSent.toFixed(3)} sent, ${t.totalReceived.toFixed(3)} received, across ${t.count} tx`,
     )
     .join("\n");
 
@@ -67,7 +92,10 @@ Net change: ${merged.netSol.toFixed(4)} SOL
 Total transactions: ${merged.txCount}
 
 Per-wallet summary:
-${walletSummaries}`;
+${walletSummaries}
+
+Top SPL tokens sent/received across all wallets:
+${topTokens || "(no token transfers)"}`;
 
   const response = await getClient().messages.create({
     model: "claude-opus-4-8",
