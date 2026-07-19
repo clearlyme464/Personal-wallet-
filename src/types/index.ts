@@ -1,3 +1,9 @@
+export interface Investigation {
+  question: string;
+  answer: string;
+  answeredAt: string;
+}
+
 export interface Wallet {
   address: string;
   label?: string;
@@ -5,6 +11,7 @@ export interface Wallet {
   lastSyncedAt?: string;
   syncStatus?: "idle" | "syncing" | "error";
   syncError?: string;
+  investigations?: Investigation[];
 }
 
 export interface TokenTransfer {

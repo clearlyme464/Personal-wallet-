@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import AskClaudePanel from "@/components/AskClaudePanel";
 import CategoryChart from "@/components/CategoryChart";
 import StatTile from "@/components/StatTile";
 import SynopsisPanel from "@/components/SynopsisPanel";
@@ -81,6 +82,11 @@ export default function WalletDetailPage() {
       </div>
 
       <SynopsisPanel endpoint={`/api/wallets/${address}/synopsis`} />
+
+      <AskClaudePanel
+        endpoint={`/api/wallets/${address}/ask`}
+        initialQaPairs={(wallet.investigations ?? []).map((i) => ({ question: i.question, answer: i.answer }))}
+      />
 
       <div className="rounded-lg border border-[var(--border)] bg-surface p-4">
         <h2 className="mb-3 text-sm font-semibold text-text-primary">Where the money went</h2>

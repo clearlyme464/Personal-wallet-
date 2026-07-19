@@ -22,6 +22,15 @@ function bump(map: Map<string, Bucket>, key: string, outflow: number, inflow: nu
   map.set(key, existing);
 }
 
+export function netSolForWallet(tx: Transaction, walletAddress: string): number {
+  let net = 0;
+  for (const nt of tx.nativeTransfers) {
+    if (nt.toUserAccount === walletAddress) net += nt.amount;
+    if (nt.fromUserAccount === walletAddress) net -= nt.amount;
+  }
+  return lamportsToSol(net);
+}
+
 interface TokenBucket {
   sent: number;
   received: number;

@@ -1,18 +1,9 @@
 import type { Transaction } from "@/types";
-import { lamportsToSol } from "@/lib/solana";
+import { netSolForWallet } from "@/lib/analytics";
 
 interface Props {
   transactions: Transaction[];
   walletAddress: string;
-}
-
-function netSolForWallet(tx: Transaction, walletAddress: string): number {
-  let net = 0;
-  for (const nt of tx.nativeTransfers) {
-    if (nt.toUserAccount === walletAddress) net += nt.amount;
-    if (nt.fromUserAccount === walletAddress) net -= nt.amount;
-  }
-  return lamportsToSol(net);
 }
 
 export default function TransactionTable({ transactions, walletAddress }: Props) {

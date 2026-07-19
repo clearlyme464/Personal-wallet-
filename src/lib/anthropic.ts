@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { WalletStats } from "@/types";
+import { netSolForWallet } from "@/lib/analytics";
+import type { Transaction, WalletStats } from "@/types";
 
 let client: Anthropic | undefined;
 
@@ -53,6 +54,49 @@ export async function generateWalletSynopsis(stats: WalletStats): Promise<string
     max_tokens: 1024,
     system:
       "You are a crypto spending analyst. Given aggregated Solana wallet transaction data, write a concise, plain-English synopsis of where the wallet's money came from and where it went. Call out the biggest spending categories and counterparties by name, note any notable inflow/outflow imbalance, and flag anything that looks like a recurring pattern (e.g. repeated swaps, subscriptions, NFT activity). Do not invent data not present in the input. Keep it under 200 words, no headers, plain prose.",
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const text = response.content.find((b) => b.type === "text");
+  return text && text.type === "text" ? text.text : "";
+}
+
+function formatTransactionsForPrompt(transactions: Transaction[], walletAddress: string): string {
+  if (transactions.length === 0) return "(no transactions synced)";
+
+  return transactions
+    .map((tx) => {
+      const net = netSolForWallet(tx, walletAddress);
+      const netStr = `${net > 0 ? "+" : ""}${net.toFixed(4)} SOL`;
+      const date = new Date(tx.timestamp * 1000).toISOString().slice(0, 10);
+      const desc = tx.description ? tx.description.slice(0, 160) : "(no description)";
+      return `- ${date} | ${tx.source !== "UNKNOWN" ? tx.source : tx.type} | net ${netStr} | ${desc} | sig: ${tx.signature}`;
+    })
+    .join("\n");
+}
+
+/**
+ * Answers a free-form investigative question about a single wallet, grounded
+ * in its aggregated stats plus a sample of its most recent raw transactions
+ * (so Claude can reference specific counterparties, signatures, and dates).
+ */
+export async function answerWalletQuestion(
+  question: string,
+  stats: WalletStats,
+  recentTransactions: Transaction[],
+): Promise<string> {
+  const prompt = `${formatStatsForPrompt(stats)}
+
+Most recent transactions (up to ${recentTransactions.length}), oldest data has been summarized above — use these for specifics like dates, counterparties, and signatures:
+${formatTransactionsForPrompt(recentTransactions, stats.address)}
+
+Question about this wallet: ${question}`;
+
+  const response = await getClient().messages.create({
+    model: "claude-opus-4-8",
+    max_tokens: 1500,
+    system:
+      "You are a crypto investigative analyst helping someone understand a Solana wallet's activity. Answer the user's question using only the aggregated stats and transaction data provided — do not invent addresses, amounts, or events that aren't in the data. Reference specific counterparties, amounts, categories, or transaction signatures where they support your answer. If the provided data is insufficient to fully answer, say so explicitly and explain what's missing rather than guessing. Keep the answer focused and under 300 words unless the question requires a list.",
     messages: [{ role: "user", content: prompt }],
   });
 
