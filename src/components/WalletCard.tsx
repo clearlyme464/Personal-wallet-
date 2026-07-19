@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import InlineAskForm from "@/components/InlineAskForm";
 import type { Wallet } from "@/types";
 
 interface Props {
@@ -13,8 +14,7 @@ function abbreviate(address: string): string {
 }
 
 export default function WalletCard({ wallet, onRemoved }: Props) {
-  async function handleRemove(e: React.MouseEvent) {
-    e.preventDefault();
+  async function handleRemove() {
     if (!confirm(`Remove ${abbreviate(wallet.address)} and its synced transactions?`)) return;
     await fetch(`/api/wallets/${wallet.address}`, { method: "DELETE" });
     onRemoved();
@@ -28,31 +28,35 @@ export default function WalletCard({ wallet, onRemoved }: Props) {
         : "text-[var(--good)]";
 
   return (
-    <Link
-      href={`/wallet/${wallet.address}`}
-      className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-surface p-4 transition hover:border-[var(--series-1)]"
-    >
-      <div>
-        <div className="font-mono text-sm font-medium text-text-primary">
-          {wallet.label ?? abbreviate(wallet.address)}
-        </div>
-        {wallet.label && <div className="font-mono text-xs text-muted">{abbreviate(wallet.address)}</div>}
-        <div className={`mt-1 text-xs ${statusColor}`}>
-          {wallet.syncStatus === "syncing"
-            ? "Syncing…"
-            : wallet.syncStatus === "error"
-              ? `Sync error: ${wallet.syncError ?? "unknown"}`
-              : wallet.lastSyncedAt
-                ? `Synced ${new Date(wallet.lastSyncedAt).toLocaleString()}`
-                : "Not synced yet"}
-        </div>
+    <div className="rounded-lg border border-[var(--border)] bg-surface p-4 transition hover:border-[var(--series-1)]">
+      <div className="flex items-center justify-between">
+        <Link href={`/wallet/${wallet.address}`} className="flex-1">
+          <div className="font-mono text-sm font-medium text-text-primary">
+            {wallet.label ?? abbreviate(wallet.address)}
+          </div>
+          {wallet.label && <div className="font-mono text-xs text-muted">{abbreviate(wallet.address)}</div>}
+          <div className={`mt-1 text-xs ${statusColor}`}>
+            {wallet.syncStatus === "syncing"
+              ? "Syncing…"
+              : wallet.syncStatus === "error"
+                ? `Sync error: ${wallet.syncError ?? "unknown"}`
+                : wallet.lastSyncedAt
+                  ? `Synced ${new Date(wallet.lastSyncedAt).toLocaleString()}`
+                  : "Not synced yet"}
+          </div>
+        </Link>
+        <button
+          onClick={handleRemove}
+          className="shrink-0 rounded-md px-2 py-1 text-xs text-muted hover:bg-[var(--gridline)] hover:text-[var(--series-8)]"
+        >
+          Remove
+        </button>
       </div>
-      <button
-        onClick={handleRemove}
-        className="rounded-md px-2 py-1 text-xs text-muted hover:bg-[var(--gridline)] hover:text-[var(--series-8)]"
-      >
-        Remove
-      </button>
-    </Link>
+
+      <InlineAskForm
+        address={wallet.address}
+        initialQaPairs={(wallet.investigations ?? []).map((i) => ({ question: i.question, answer: i.answer }))}
+      />
+    </div>
   );
 }
