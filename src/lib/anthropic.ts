@@ -146,6 +146,57 @@ Question about this wallet: ${question}`;
   return text && text.type === "text" ? text.text : "";
 }
 
+/**
+ * Answers a free-form investigative question across every tracked wallet at
+ * once (e.g. "which of my wallets sent BAWLS, and to whom?"), grounded in
+ * each wallet's aggregated stats plus a sample of its most recent raw
+ * transactions.
+ */
+export async function answerPortfolioQuestion(
+  question: string,
+  perWalletStats: WalletStats[],
+  merged: {
+    totalInflowSol: number;
+    totalOutflowSol: number;
+    netSol: number;
+    txCount: number;
+  },
+  recentTransactionsByAddress: Map<string, Transaction[]>,
+): Promise<string> {
+  const walletSections = perWalletStats
+    .map((stats) => {
+      const recent = recentTransactionsByAddress.get(stats.address) ?? [];
+      const mintSymbols = buildMintSymbolMap(stats);
+      return `=== Wallet: ${stats.label ?? stats.address} (${stats.address}) ===
+${formatStatsForPrompt(stats)}
+
+Recent transactions for this wallet (up to ${recent.length}):
+${formatTransactionsForPrompt(recent, stats.address, mintSymbols)}`;
+    })
+    .join("\n\n");
+
+  const prompt = `Portfolio overview across ${perWalletStats.length} wallet(s):
+Total received: ${merged.totalInflowSol.toFixed(4)} SOL
+Total sent: ${merged.totalOutflowSol.toFixed(4)} SOL
+Net change: ${merged.netSol.toFixed(4)} SOL
+Total transactions: ${merged.txCount}
+
+${walletSections}
+
+Question about this portfolio, which may concern any single wallet above, a comparison between wallets, or the portfolio as a whole: ${question}`;
+
+  const response = await getClient().messages.create({
+    model: "claude-opus-4-8",
+    max_tokens: 1800,
+    system:
+      "You are a crypto investigative analyst helping someone understand activity across several Solana wallets they track together as one portfolio, including specific SPL token transfers (e.g. \"which wallet sent token X, to whom, and how much\"). Answer the user's question using only the per-wallet stats and transaction data provided — do not invent addresses, amounts, wallets, or events that aren't in the data. When a question could involve any wallet, check all of them and state which wallet(s) the answer is based on (by label or address). Reference specific counterparty addresses, amounts, token symbols, or transaction signatures where they support your answer. If the provided data is insufficient to fully answer, say so explicitly and explain what's missing rather than guessing. Keep the answer focused and under 350 words unless the question requires a list.",
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const text = response.content.find((b) => b.type === "text");
+  return text && text.type === "text" ? text.text : "";
+}
+
 export async function generatePortfolioSynopsis(
   perWallet: WalletStats[],
   merged: {

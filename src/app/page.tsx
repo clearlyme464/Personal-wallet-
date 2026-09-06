@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AddWalletForm from "@/components/AddWalletForm";
+import AskClaudePanel from "@/components/AskClaudePanel";
 import WalletCard from "@/components/WalletCard";
 import type { Wallet } from "@/types";
 
@@ -31,6 +32,14 @@ export default function HomePage() {
       </div>
 
       <AddWalletForm onAdded={refresh} />
+
+      {!loading && wallets.length > 0 && (
+        <AskClaudePanel
+          endpoint="/api/overview/ask"
+          title="Ask Claude about your added wallets"
+          placeholder="e.g. Which of my wallets sent BAWLS, and to how many addresses?"
+        />
+      )}
 
       <div>
         {loading ? (
