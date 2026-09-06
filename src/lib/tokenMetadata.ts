@@ -1,6 +1,8 @@
+import { apiKey } from "@/lib/helius";
 import type { WalletStats } from "@/types";
 
 const WRAPPED_SOL_MINT = "So11111111111111111111111111111111111111112";
+const HELIUS_RPC_URL = "https://mainnet.helius-rpc.com";
 
 interface TokenMeta {
   symbol: string;
@@ -11,6 +13,54 @@ interface JupiterTokenListEntry {
   address: string;
   symbol: string;
   name: string;
+}
+
+interface HeliusAsset {
+  id: string;
+  content?: { metadata?: { symbol?: string; name?: string } };
+  token_info?: { symbol?: string };
+}
+
+/**
+ * Falls back to Helius's DAS API (getAssetBatch) to resolve symbol/name for
+ * mints that aren't on Jupiter's strict token list — e.g. smaller or newer
+ * SPL tokens that a wallet holder still wants to identify by name.
+ */
+async function resolveTokenMetadataViaHelius(mints: string[]): Promise<Map<string, TokenMeta>> {
+  const result = new Map<string, TokenMeta>();
+  if (mints.length === 0) return result;
+
+  try {
+    const url = new URL(HELIUS_RPC_URL);
+    url.searchParams.set("api-key", apiKey());
+
+    const res = await fetch(url.toString(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "token-metadata",
+        method: "getAssetBatch",
+        params: { ids: mints },
+      }),
+      cache: "no-store",
+    });
+    if (!res.ok) return result;
+
+    const body = (await res.json()) as { result?: (HeliusAsset | null)[] };
+    for (const asset of body.result ?? []) {
+      if (!asset) continue;
+      const symbol = asset.token_info?.symbol || asset.content?.metadata?.symbol;
+      const name = asset.content?.metadata?.name;
+      if (symbol || name) {
+        result.set(asset.id, { symbol: symbol ?? name!, name: name ?? symbol! });
+      }
+    }
+  } catch {
+    // Metadata is a nice-to-have; degrade to raw mint addresses on failure.
+  }
+
+  return result;
 }
 
 let tokenListCache: Map<string, TokenMeta> | null = null;
@@ -57,9 +107,16 @@ export async function resolveTokenMetadata(mints: string[]): Promise<Map<string,
   if (unresolved.length === 0) return result;
 
   const list = await loadTokenList();
+  const stillUnresolved: string[] = [];
   for (const mint of unresolved) {
     const meta = list.get(mint);
     if (meta) result.set(mint, meta);
+    else stillUnresolved.push(mint);
+  }
+
+  if (stillUnresolved.length > 0) {
+    const heliusMeta = await resolveTokenMetadataViaHelius(stillUnresolved);
+    for (const [mint, meta] of heliusMeta) result.set(mint, meta);
   }
 
   return result;

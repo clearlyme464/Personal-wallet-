@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { COLLECTIONS, getDb } from "@/lib/mongodb";
 import { computeWalletStats } from "@/lib/analytics";
 import { answerWalletQuestion } from "@/lib/anthropic";
+import { annotateTokenMetadata } from "@/lib/tokenMetadata";
 import type { Investigation, Transaction, Wallet } from "@/types";
 
 export async function POST(
@@ -39,7 +40,7 @@ export async function POST(
     );
   }
 
-  const stats = computeWalletStats(address, transactions, wallet.label);
+  const stats = await annotateTokenMetadata(computeWalletStats(address, transactions, wallet.label));
 
   try {
     const answer = await answerWalletQuestion(question, stats, transactions.slice(0, 60));

@@ -28,6 +28,16 @@ function formatStatsForPrompt(stats: WalletStats): string {
     )
     .join("\n");
 
+  const tokenFlowLines = stats.tokenFlows
+    .slice(0, 30)
+    .map(
+      (f) =>
+        `- ${f.direction === "sent" ? "Sent" : "Received"} ${f.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${f.symbol ?? f.mint} ${
+          f.direction === "sent" ? "to" : "from"
+        } ${f.counterparty}, across ${f.count} tx`,
+    )
+    .join("\n");
+
   return `Wallet: ${stats.address}${stats.label ? ` (${stats.label})` : ""}
 Transactions analyzed: ${stats.txCount}
 Total received: ${stats.totalInflowSol.toFixed(4)} SOL
@@ -43,7 +53,10 @@ Top counterparty addresses (where money came from / went to):
 ${topCounterparties || "(no counterparty data)"}
 
 Top SPL tokens sent/received (amounts are in each token's own units, not SOL):
-${topTokens || "(no token transfers)"}`;
+${topTokens || "(no token transfers)"}
+
+SPL token transfers by counterparty (up to 30, largest first) — use this to answer "who did I send/receive token X to/from and how much":
+${tokenFlowLines || "(no per-counterparty token transfer data)"}`;
 }
 
 export async function generateWalletSynopsis(stats: WalletStats): Promise<string> {
@@ -61,7 +74,21 @@ export async function generateWalletSynopsis(stats: WalletStats): Promise<string
   return text && text.type === "text" ? text.text : "";
 }
 
-function formatTransactionsForPrompt(transactions: Transaction[], walletAddress: string): string {
+/** Builds a mint -> symbol lookup from a wallet's aggregated token stats, for
+ *  labeling raw SPL transfers in the per-transaction prompt with human-readable
+ *  symbols instead of bare mint addresses. */
+function buildMintSymbolMap(stats: WalletStats): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const t of stats.tokenTally) if (t.symbol) map.set(t.mint, t.symbol);
+  for (const f of stats.tokenFlows) if (f.symbol) map.set(f.mint, f.symbol);
+  return map;
+}
+
+function formatTransactionsForPrompt(
+  transactions: Transaction[],
+  walletAddress: string,
+  mintSymbols: Map<string, string>,
+): string {
   if (transactions.length === 0) return "(no transactions synced)";
 
   return transactions
@@ -70,7 +97,20 @@ function formatTransactionsForPrompt(transactions: Transaction[], walletAddress:
       const netStr = `${net > 0 ? "+" : ""}${net.toFixed(4)} SOL`;
       const date = new Date(tx.timestamp * 1000).toISOString().slice(0, 10);
       const desc = tx.description ? tx.description.slice(0, 160) : "(no description)";
-      return `- ${date} | ${tx.source !== "UNKNOWN" ? tx.source : tx.type} | net ${netStr} | ${desc} | sig: ${tx.signature}`;
+
+      const tokenLines = tx.tokenTransfers
+        .filter((tt) => tt.fromUserAccount === walletAddress || tt.toUserAccount === walletAddress)
+        .map((tt) => {
+          const outbound = tt.fromUserAccount === walletAddress;
+          const counterparty = outbound ? tt.toUserAccount : tt.fromUserAccount;
+          const symbol = mintSymbols.get(tt.mint) ?? tt.mint;
+          return `${outbound ? "sent" : "received"} ${tt.tokenAmount} ${symbol}${
+            counterparty ? ` ${outbound ? "to" : "from"} ${counterparty}` : ""
+          }`;
+        });
+      const tokenStr = tokenLines.length > 0 ? ` | tokens: ${tokenLines.join("; ")}` : "";
+
+      return `- ${date} | ${tx.source !== "UNKNOWN" ? tx.source : tx.type} | net ${netStr} | ${desc}${tokenStr} | sig: ${tx.signature}`;
     })
     .join("\n");
 }
@@ -85,10 +125,12 @@ export async function answerWalletQuestion(
   stats: WalletStats,
   recentTransactions: Transaction[],
 ): Promise<string> {
+  const mintSymbols = buildMintSymbolMap(stats);
+
   const prompt = `${formatStatsForPrompt(stats)}
 
 Most recent transactions (up to ${recentTransactions.length}), oldest data has been summarized above — use these for specifics like dates, counterparties, and signatures:
-${formatTransactionsForPrompt(recentTransactions, stats.address)}
+${formatTransactionsForPrompt(recentTransactions, stats.address, mintSymbols)}
 
 Question about this wallet: ${question}`;
 
@@ -96,7 +138,7 @@ Question about this wallet: ${question}`;
     model: "claude-opus-4-8",
     max_tokens: 1500,
     system:
-      "You are a crypto investigative analyst helping someone understand a Solana wallet's activity. Answer the user's question using only the aggregated stats and transaction data provided — do not invent addresses, amounts, or events that aren't in the data. Reference specific counterparties, amounts, categories, or transaction signatures where they support your answer. If the provided data is insufficient to fully answer, say so explicitly and explain what's missing rather than guessing. Keep the answer focused and under 300 words unless the question requires a list.",
+      "You are a crypto investigative analyst helping someone understand a Solana wallet's activity, including specific SPL token transfers (e.g. \"where did I send token X and how much\"). Answer the user's question using only the aggregated stats and transaction data provided — do not invent addresses, amounts, or events that aren't in the data. When asked about a specific token by name, match it against the token symbols/names shown in the stats and transfer data (tokens may not be well-known and are identified by mint address if no symbol was resolved). Reference specific counterparty addresses, amounts, token symbols, or transaction signatures where they support your answer — e.g. list each recipient address and how much of the token was sent to it. If the provided data is insufficient to fully answer (e.g. the token or transaction isn't present in what was synced), say so explicitly and explain what's missing rather than guessing. Keep the answer focused and under 300 words unless the question requires a list.",
     messages: [{ role: "user", content: prompt }],
   });
 

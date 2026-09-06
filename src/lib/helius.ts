@@ -14,7 +14,7 @@ interface RawHeliusTransaction {
   tokenTransfers?: TokenTransfer[];
 }
 
-function apiKey(): string {
+export function apiKey(): string {
   const key = process.env.HELIUS_API_KEY;
   if (!key) throw new Error("HELIUS_API_KEY is not set");
   return key;

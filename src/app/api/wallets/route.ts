@@ -4,6 +4,7 @@ import { parseWalletInput } from "@/lib/solana";
 import { fetchWalletTransactions } from "@/lib/helius";
 import { computeWalletStats } from "@/lib/analytics";
 import { answerWalletQuestion } from "@/lib/anthropic";
+import { annotateTokenMetadata } from "@/lib/tokenMetadata";
 import type { Investigation, Transaction, Wallet } from "@/types";
 
 export async function GET() {
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
       let answer: string | undefined;
       if (question && transactions.length > 0) {
         try {
-          const stats = computeWalletStats(address, transactions);
+          const stats = await annotateTokenMetadata(computeWalletStats(address, transactions));
           answer = await answerWalletQuestion(question, stats, transactions.slice(0, 60));
           const investigation: Investigation = { question, answer, answeredAt: new Date().toISOString() };
           await walletsCol.updateOne({ address }, { $push: { investigations: investigation } });
