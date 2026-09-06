@@ -36,6 +36,34 @@ export default function OverviewPage() {
     refresh();
   }, [refresh]);
 
+  function exportWalletsCsv() {
+    if (!data) return;
+
+    const header = ["address", "label", "txCount", "totalSentSol", "totalReceivedSol", "netSol"];
+    const rows = data.perWalletStats.map((s) => [
+      s.address,
+      s.label ?? "",
+      String(s.txCount),
+      s.totalOutflowSol.toFixed(9),
+      s.totalInflowSol.toFixed(9),
+      s.netSol.toFixed(9),
+    ]);
+
+    const csv = [header, ...rows]
+      .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `wallets-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   if (loading) return <p className="text-sm text-muted">Loading…</p>;
   if (!data || data.walletCount === 0) {
     return (
@@ -84,7 +112,15 @@ export default function OverviewPage() {
       </div>
 
       <div className="rounded-lg border border-[var(--border)] bg-surface p-4">
-        <h2 className="mb-3 text-sm font-semibold text-text-primary">By wallet</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-text-primary">By wallet</h2>
+          <button
+            onClick={exportWalletsCsv}
+            className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-text-secondary hover:bg-[var(--gridline)]"
+          >
+            Export wallets (CSV)
+          </button>
+        </div>
         <ul className="flex flex-col gap-2">
           {perWalletStats
             .slice()
