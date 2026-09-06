@@ -20,6 +20,11 @@ export function apiKey(): string {
   return key;
 }
 
+/** Default depth of transaction history synced per wallet. Bump this (and any
+ *  explicit call-site overrides) if a wallet's older activity — e.g. a token
+ *  transfer further back than this many transactions — isn't showing up. */
+export const DEFAULT_MAX_TRANSACTIONS = 2000;
+
 /**
  * Fetches parsed transaction history for a wallet via Helius's Enhanced
  * Transactions API. Paginates backwards from the most recent signature
@@ -28,7 +33,7 @@ export function apiKey(): string {
  */
 export async function fetchWalletTransactions(
   address: string,
-  maxTransactions = 200,
+  maxTransactions = DEFAULT_MAX_TRANSACTIONS,
 ): Promise<Transaction[]> {
   const results: Transaction[] = [];
   let before: string | undefined;

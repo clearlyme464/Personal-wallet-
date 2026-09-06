@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { COLLECTIONS, getDb } from "@/lib/mongodb";
 import { parseWalletInput } from "@/lib/solana";
-import { fetchWalletTransactions } from "@/lib/helius";
+import { DEFAULT_MAX_TRANSACTIONS, fetchWalletTransactions } from "@/lib/helius";
 import { computeWalletStats } from "@/lib/analytics";
 import { answerWalletQuestion } from "@/lib/anthropic";
 import { annotateTokenMetadata } from "@/lib/tokenMetadata";
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     await walletsCol.insertOne({ address, addedAt: now, syncStatus: "syncing" });
 
     try {
-      const transactions = await fetchWalletTransactions(address, 200);
+      const transactions = await fetchWalletTransactions(address, DEFAULT_MAX_TRANSACTIONS);
       if (transactions.length > 0) {
         const ops = transactions.map((tx) => ({
           updateOne: {

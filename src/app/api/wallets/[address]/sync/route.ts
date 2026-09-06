@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { COLLECTIONS, getDb } from "@/lib/mongodb";
-import { fetchWalletTransactions } from "@/lib/helius";
+import { DEFAULT_MAX_TRANSACTIONS, fetchWalletTransactions } from "@/lib/helius";
 import type { Transaction, Wallet } from "@/types";
 
 export async function POST(
@@ -20,7 +20,7 @@ export async function POST(
   await walletsCol.updateOne({ address }, { $set: { syncStatus: "syncing" } });
 
   try {
-    const transactions = await fetchWalletTransactions(address, 200);
+    const transactions = await fetchWalletTransactions(address, DEFAULT_MAX_TRANSACTIONS);
     if (transactions.length > 0) {
       const ops = transactions.map((tx) => ({
         updateOne: {
